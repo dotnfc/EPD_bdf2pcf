@@ -33,6 +33,7 @@ bdf2pcf.exe -z -d chardict.txt -o wenquanyi-zh-16.pcf wenquanyi-zh-16.bdf
 
 wenquanyi-zh-16.bdf 是开源的[文泉驿点阵字体](http://wenq.org/wqy2/index.cgi?BitmapSong)，非常适合墨水屏显示，美观、大方。当然，使用 [unifont](https://unifoundry.com/unifont/index.html) 的 unifont-15.0.06.bdf.gz 也是可以的。
 
+印象当中，5-6MB 的 bdf >> 2.5 MB pcf >> 320KB pcf_lz4。放一个标准字体，一个加粗字体，esp32s3 的 vfs 是可以支持的。
 
 # Reference
 > [lz4-dev@rev_e846165](
