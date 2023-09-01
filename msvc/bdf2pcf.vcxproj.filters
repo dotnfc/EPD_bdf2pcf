@@ -21,9 +21,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="file_util.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="..\bdf2pcf\utilbitmap.c">
       <Filter>bdf2pcf</Filter>
     </ClCompile>
@@ -80,6 +77,9 @@
     </ClCompile>
     <ClCompile Include="..\lz4\lib\xxhash.c">
       <Filter>lz4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\file_util.cpp">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

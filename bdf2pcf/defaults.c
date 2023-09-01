@@ -54,18 +54,18 @@ in this Software without prior written authorization from The Open Group.
 #ifdef GLYPHPADBYTES
 #define DEFAULT_GLYPH_PAD GLYPHPADBYTES
 #else
-#define DEFAULT_GLYPH_PAD 4
+#define DEFAULT_GLYPH_PAD 1 // font glyph padding, default 4
 #endif
 #endif
 
 #ifndef DEFAULT_SCAN_UNIT
-#define DEFAULT_SCAN_UNIT 1
+#define DEFAULT_SCAN_UNIT 1 // font scanline unit, default 1
 #endif
 
 #include "fntfilst.h"
 
 void
-FontDefaultFormat(int *bit, int *byte, int *glyph, int *scan)
+FontDefaultFormat (int *bit, int *byte, int *glyph, int *scan)
 {
     *bit = DEFAULT_BIT_ORDER;
     *byte = DEFAULT_BYTE_ORDER;

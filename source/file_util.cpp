@@ -112,7 +112,7 @@ int char_dict_wchar_in_dict(unsigned int wchar)
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <lz4/lz4.h>
+#include <lib/lz4.h>
 
 extern "C" {
     void lz4_reset();

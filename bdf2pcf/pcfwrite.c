@@ -41,12 +41,19 @@ from The Open Group.
 #include <stdarg.h>
 #include <stdio.h>
 
-/* Write PCF font files */
+ /* Write PCF font files */
 
-static CARD32 current_position;
+static CARD32  current_position;
 
-static void _X_ATTRIBUTE_PRINTF(1, 2)
-pcfError(const char *message, ...)
+///
+void lz4_reset();
+void lz4_putUInt16(int isMSB, int value);
+int lz4_compress();
+const unsigned char* lz4_get_output(int* out_length);
+static int pcfCompress_BDF_Encodings(BitmapFontPtr  bitmapFont, int nencodings, CARD32 format);
+
+void
+pcfError(const char* message, ...)
 {
     va_list args;
 
@@ -56,9 +63,8 @@ pcfError(const char *message, ...)
     vfprintf(stderr, message, args);
     va_end(args);
 }
-
 static int
-pcfWrite(FontFilePtr file, char *b, int c)
+pcfWrite(FontFilePtr file, char* b, int c)
 {
     current_position += c;
     return FontFileWrite(file, b, c);
@@ -68,9 +74,9 @@ static int
 pcfPutLSB32(FontFilePtr file, int c)
 {
     current_position += 4;
-    (void) FontFilePutc(c, file);
-    (void) FontFilePutc(c >> 8, file);
-    (void) FontFilePutc(c >> 16, file);
+    (void)FontFilePutc(c, file);
+    (void)FontFilePutc(c >> 8, file);
+    (void)FontFilePutc(c >> 16, file);
     return FontFilePutc(c >> 24, file);
 }
 
@@ -79,15 +85,15 @@ pcfPutINT32(FontFilePtr file, CARD32 format, int c)
 {
     current_position += 4;
     if (PCF_BYTE_ORDER(format) == MSBFirst) {
-        (void) FontFilePutc(c >> 24, file);
-        (void) FontFilePutc(c >> 16, file);
-        (void) FontFilePutc(c >> 8, file);
+        (void)FontFilePutc(c >> 24, file);
+        (void)FontFilePutc(c >> 16, file);
+        (void)FontFilePutc(c >> 8, file);
         return FontFilePutc(c, file);
     }
     else {
-        (void) FontFilePutc(c, file);
-        (void) FontFilePutc(c >> 8, file);
-        (void) FontFilePutc(c >> 16, file);
+        (void)FontFilePutc(c, file);
+        (void)FontFilePutc(c >> 8, file);
+        (void)FontFilePutc(c >> 16, file);
         return FontFilePutc(c >> 24, file);
     }
 }
@@ -97,11 +103,11 @@ pcfPutINT16(FontFilePtr file, CARD32 format, int c)
 {
     current_position += 2;
     if (PCF_BYTE_ORDER(format) == MSBFirst) {
-        (void) FontFilePutc(c >> 8, file);
+        (void)FontFilePutc(c >> 8, file);
         return FontFilePutc(c, file);
     }
     else {
-        (void) FontFilePutc(c, file);
+        (void)FontFilePutc(c, file);
         return FontFilePutc(c >> 8, file);
     }
 }
@@ -117,11 +123,13 @@ pcfPutINT8(FontFilePtr file, CARD32 format, int c)
 static void
 pcfWriteTOC(FontFilePtr file, PCFTablePtr table, int count)
 {
-    CARD32 version = PCF_FILE_VERSION;
+    CARD32      version;
+    int         i;
 
+    version = PCF_FILE_VERSION;
     pcfPutLSB32(file, version);
     pcfPutLSB32(file, count);
-    for (int i = 0; i < count; i++) {
+    for (i = 0; i < count; i++) {
         pcfPutLSB32(file, table->type);
         pcfPutLSB32(file, table->format);
         pcfPutLSB32(file, table->size);
@@ -131,7 +139,7 @@ pcfWriteTOC(FontFilePtr file, PCFTablePtr table, int count)
 }
 
 static void
-pcfPutCompressedMetric(FontFilePtr file, CARD32 format, xCharInfo * metric)
+pcfPutCompressedMetric(FontFilePtr file, CARD32 format, xCharInfo* metric)
 {
     pcfPutINT8(file, format, metric->leftSideBearing + 0x80);
     pcfPutINT8(file, format, metric->rightSideBearing + 0x80);
@@ -141,7 +149,7 @@ pcfPutCompressedMetric(FontFilePtr file, CARD32 format, xCharInfo * metric)
 }
 
 static void
-pcfPutMetric(FontFilePtr file, CARD32 format, xCharInfo * metric)
+pcfPutMetric(FontFilePtr file, CARD32 format, xCharInfo* metric)
 {
     pcfPutINT16(file, format, metric->leftSideBearing);
     pcfPutINT16(file, format, metric->rightSideBearing);
@@ -154,11 +162,11 @@ pcfPutMetric(FontFilePtr file, CARD32 format, xCharInfo * metric)
 static void
 pcfPutBitmap(FontFilePtr file, CARD32 format, CharInfoPtr pCI)
 {
-    int count;
-    unsigned char *bits;
+    int         count;
+    unsigned char* bits;
 
     count = BYTES_FOR_GLYPH(pCI, PCF_GLYPH_PAD(format));
-    bits = (unsigned char *) pCI->bits;
+    bits = (unsigned char*)pCI->bits;
     current_position += count;
     while (count--)
         FontFilePutc(*bits++, file);
@@ -204,17 +212,19 @@ pcfPutAccel(FontFilePtr file, CARD32 format, FontInfoPtr pFontInfo)
 
 #define CanCompressMetrics(min,max) (CanCompressMetric(min) && CanCompressMetric(max))
 
-static char *
+static char*
 pcfNameForAtom(Atom a)
 {
     return NameForAtom(a);
 }
 
 int
-pcfWriteFont(FontPtr pFont, FontFilePtr file)
+pcfWriteFont(FontPtr pFont, FontFilePtr file, int bdf_enc_compress)
 {
-    PCFTableRec tables[32], *table;
-    CARD32      mask;
+    PCFTableRec tables[32],
+        * table;
+    CARD32      mask,
+        bit;
     int         ntables;
     int         size;
     CARD32      format;
@@ -222,18 +232,20 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
     int         cur_table;
     int         prop_string_size;
     int         glyph_string_size;
-    xCharInfo  *minbounds, *maxbounds;
-    xCharInfo  *ink_minbounds, *ink_maxbounds;
-    BitmapFontPtr bitmapFont;
+    xCharInfo* minbounds,
+        * maxbounds;
+    xCharInfo* ink_minbounds,
+        * ink_maxbounds;
+    BitmapFontPtr  bitmapFont;
     int         nencodings = 0;
     int         header_size;
     FontPropPtr offsetProps;
     int         prop_pad = 0;
-    char       *atom_name;
+    char* atom_name;
     int         glyph;
     CARD32      offset;
 
-    bitmapFont = (BitmapFontPtr) pFont->fontPrivate;
+    bitmapFont = (BitmapFontPtr)pFont->fontPrivate;
     if (bitmapFont->bitmapExtra) {
         minbounds = &bitmapFont->bitmapExtra->info.minbounds;
         maxbounds = &bitmapFont->bitmapExtra->info.maxbounds;
@@ -249,28 +261,26 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
     offsetProps = malloc(pFont->info.nprops * sizeof(FontPropRec));
     if (!offsetProps) {
         pcfError("pcfWriteFont(): Couldn't allocate offsetProps (%d*%d)",
-                 pFont->info.nprops, (int) sizeof(FontPropRec));
+            pFont->info.nprops, (int)sizeof(FontPropRec));
         return AllocError;
     }
     prop_string_size = 0;
     for (i = 0; i < pFont->info.nprops; i++) {
         offsetProps[i].name = prop_string_size;
-        prop_string_size +=
-            strlen(pcfNameForAtom(pFont->info.props[i].name)) + 1;
+        prop_string_size += strlen(pcfNameForAtom(pFont->info.props[i].name)) + 1;
         if (pFont->info.isStringProp[i]) {
             offsetProps[i].value = prop_string_size;
-            prop_string_size +=
-                strlen(pcfNameForAtom(pFont->info.props[i].value)) + 1;
+            prop_string_size += strlen(pcfNameForAtom(pFont->info.props[i].value)) + 1;
         }
         else
             offsetProps[i].value = pFont->info.props[i].value;
     }
     format = PCF_FORMAT(pFont->bit, pFont->byte, pFont->glyph, pFont->scan);
-    mask = 0xFFFFFFF;
+    mask = PCF_OUT_MASK; // 0xFFFFFFF;
     ntables = 0;
     table = tables;
     while (mask) {
-        CARD32 bit = lowbit(mask);
+        bit = lowbit(mask);
         mask &= ~bit;
         table->type = bit;
         switch (bit) {
@@ -278,7 +288,8 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             table->format = PCF_DEFAULT_FORMAT | format;
             size = S32 + S32 + (S32 + S8 + S32) * pFont->info.nprops;
             prop_pad = Pad(size);
-            table->size = RoundUp(size) + S32 + RoundUp(prop_string_size);
+            table->size = RoundUp(size) + S32 +
+                RoundUp(prop_string_size);
             table++;
             break;
         case PCF_ACCELERATORS:
@@ -305,8 +316,7 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             table->format = PCF_DEFAULT_FORMAT | format;
             size = S32 + S32 + bitmapFont->num_chars * S32 +
                 GLYPHPADOPTIONS * S32 +
-                bitmapFont->bitmapExtra->
-                bitmapsSizes[PCF_GLYPH_PAD_INDEX(format)];
+                bitmapFont->bitmapExtra->bitmapsSizes[PCF_GLYPH_PAD_INDEX(format)];
             table->size = RoundUp(size);
             table++;
             break;
@@ -328,7 +338,15 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             table->format = PCF_DEFAULT_FORMAT | format;
             nencodings = (pFont->info.lastRow - pFont->info.firstRow + 1) *
                 (pFont->info.lastCol - pFont->info.firstCol + 1);
-            size = S32 + 5 * S16 + nencodings * S16;
+            if (bdf_enc_compress) {
+                // do lz4 compressing
+                table->format |= 0x80000000;    // lz4 compressed
+                size = S32 + 5 * S16 + S32 + pcfCompress_BDF_Encodings(bitmapFont, nencodings, format);
+            }
+            else {
+                // plain mode
+                size = S32 + 5 * S16 + nencodings * S16;
+            }
             table->size = RoundUp(size);
             table++;
             break;
@@ -341,12 +359,9 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             table->format = PCF_DEFAULT_FORMAT | format;
             glyph_string_size = 0;
             for (i = 0; i < bitmapFont->num_chars; i++)
-                glyph_string_size +=
-                    strlen(pcfNameForAtom
-                           (bitmapFont->bitmapExtra->glyphNames[i])) + 1;
-            table->size =
-                S32 + S32 + bitmapFont->num_chars * S32 + S32 +
-                RoundUp(glyph_string_size);
+                glyph_string_size += strlen(pcfNameForAtom(bitmapFont->bitmapExtra->glyphNames[i])) + 1;
+            table->size = S32 + S32 + bitmapFont->num_chars * S32 +
+                S32 + RoundUp(glyph_string_size);
             table++;
             break;
         case PCF_BDF_ACCELERATORS:
@@ -364,17 +379,19 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
     header_size = S32 + S32 + ntables * (4 * S32);
     offset = header_size;
     for (cur_table = 0, table = tables;
-         cur_table < ntables; cur_table++, table++) {
+        cur_table < ntables;
+        cur_table++, table++) {
         table->offset = offset;
         offset += table->size;
     }
     current_position = 0;
     pcfWriteTOC(file, tables, ntables);
     for (cur_table = 0, table = tables;
-         cur_table < ntables; cur_table++, table++) {
+        cur_table < ntables;
+        cur_table++, table++) {
         if (current_position > table->offset) {
             printf("can't go backwards... %d > %d\n",
-                   (int) current_position, (int) table->offset);
+                (int)current_position, (int)table->offset);
             free(offsetProps);
             return BadFontName;
         }
@@ -408,8 +425,7 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             if (PCF_FORMAT_MATCH(table->format, PCF_COMPRESSED_METRICS)) {
                 pcfPutINT16(file, format, bitmapFont->num_chars);
                 for (i = 0; i < bitmapFont->num_chars; i++)
-                    pcfPutCompressedMetric(file, format,
-                                           &bitmapFont->metrics[i].metrics);
+                    pcfPutCompressedMetric(file, format, &bitmapFont->metrics[i].metrics);
             }
             else {
                 pcfPutINT32(file, format, bitmapFont->num_chars);
@@ -427,7 +443,7 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             }
             for (i = 0; i < GLYPHPADOPTIONS; i++) {
                 pcfPutINT32(file, format,
-                            bitmapFont->bitmapExtra->bitmapsSizes[i]);
+                    bitmapFont->bitmapExtra->bitmapsSizes[i]);
             }
             for (i = 0; i < bitmapFont->num_chars; i++)
                 pcfPutBitmap(file, format, &bitmapFont->metrics[i]);
@@ -436,8 +452,7 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             if (PCF_FORMAT_MATCH(table->format, PCF_COMPRESSED_METRICS)) {
                 pcfPutINT16(file, format, bitmapFont->num_chars);
                 for (i = 0; i < bitmapFont->num_chars; i++)
-                    pcfPutCompressedMetric(file, format,
-                                           &bitmapFont->ink_metrics[i]);
+                    pcfPutCompressedMetric(file, format, &bitmapFont->ink_metrics[i]);
             }
             else {
                 pcfPutINT32(file, format, bitmapFont->num_chars);
@@ -451,13 +466,23 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             pcfPutINT16(file, format, pFont->info.firstRow);
             pcfPutINT16(file, format, pFont->info.lastRow);
             pcfPutINT16(file, format, pFont->info.defaultCh);
-            for (i = 0; i < nencodings; i++) {
-                if (ACCESSENCODING(bitmapFont->encoding, i))
-                    pcfPutINT16(file, format,
-                                ACCESSENCODING(bitmapFont->encoding, i) -
-                                bitmapFont->metrics);
-                else
-                    pcfPutINT16(file, format, 0xFFFF);
+
+            if (bdf_enc_compress) {
+                // do lz4 compressing
+                int length = 0;
+                const unsigned char* bdf_enc_data = lz4_get_output(&length);
+                pcfPutINT32(file, format, length);      // lz4 compressed data length
+                pcfWrite(file, bdf_enc_data, length);   // lz4 compressed data
+            }
+            else {
+                for (i = 0; i < nencodings; i++) {
+                    if (ACCESSENCODING(bitmapFont->encoding, i))
+                        pcfPutINT16(file, format,
+                            ACCESSENCODING(bitmapFont->encoding, i) -
+                            bitmapFont->metrics);
+                    else
+                        pcfPutINT16(file, format, 0xFFFF);
+                }
             }
             break;
         case PCF_SWIDTHS:
@@ -470,14 +495,11 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
             offset = 0;
             for (i = 0; i < bitmapFont->num_chars; i++) {
                 pcfPutINT32(file, format, offset);
-                offset +=
-                    strlen(pcfNameForAtom
-                           (bitmapFont->bitmapExtra->glyphNames[i])) + 1;
+                offset += strlen(pcfNameForAtom(bitmapFont->bitmapExtra->glyphNames[i])) + 1;
             }
             pcfPutINT32(file, format, offset);
             for (i = 0; i < bitmapFont->num_chars; i++) {
-                atom_name =
-                    pcfNameForAtom(bitmapFont->bitmapExtra->glyphNames[i]);
+                atom_name = pcfNameForAtom(bitmapFont->bitmapExtra->glyphNames[i]);
                 pcfWrite(file, atom_name, strlen(atom_name) + 1);
             }
             break;
@@ -489,4 +511,28 @@ pcfWriteFont(FontPtr pFont, FontFilePtr file)
 
     free(offsetProps);
     return Successful;
+}
+
+int pcfCompress_BDF_Encodings(BitmapFontPtr  bitmapFont, int nencodings, CARD32 format)
+{
+    int i;
+    int isMSB = (PCF_BYTE_ORDER(format) == MSBFirst);
+
+    lz4_reset();
+
+    for (i = 0; i < nencodings; i++) {
+        if (ACCESSENCODING(bitmapFont->encoding, i)) {
+            lz4_putUInt16(isMSB, 
+                        ACCESSENCODING(bitmapFont->encoding, i) - bitmapFont->metrics);
+        }
+        else {
+            lz4_putUInt16(isMSB, 0xFFFF);
+        }
+    }
+
+    int result = lz4_compress();
+    if (result == 0)
+        pcfError("pcfCompress_BDF_Encodings(): failed to compress.");
+
+    return result;
 }

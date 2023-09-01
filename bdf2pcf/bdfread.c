@@ -82,17 +82,27 @@ from The Open Group.
 static Bool bdfPadToTerminal(FontPtr pFont);
 extern int  bdfFileLineNum;
 
+int char_dict_count();
+int char_dict_wchar_in_dict(unsigned int wchar);
+
 /***====================================================================***/
 
 static Bool
 bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
-              int glyph, int scan, CARD32 *sizes)
+    int glyph, int scan, CARD32* sizes)
 {
-    int widthBits, widthBytes, widthHexChars;
-    int height, row;
-    int i, nextByte;
-    unsigned char *pInBits, *picture, *line = NULL;
-    unsigned char lineBuf[BDFLINELEN];
+    int         widthBits,
+        widthBytes,
+        widthHexChars;
+    int         height,
+        row;
+    int         i,
+        inLineLen,
+        nextByte;
+    unsigned char* pInBits,
+        * picture,
+        * line = NULL;
+    unsigned char        lineBuf[BDFLINELEN];
 
     widthBits = GLYPHWIDTHPIXELS(pCI);
     height = GLYPHHEIGHTPIXELS(pCI);
@@ -107,7 +117,7 @@ bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
     }
     else
         picture = NULL;
-    pCI->bits = (char *) picture;
+    pCI->bits = (char*)picture;
 
     if (sizes) {
         for (i = 0; i < GLYPHPADOPTIONS; i++)
@@ -116,24 +126,22 @@ bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
     nextByte = 0;
     widthHexChars = BYTES_PER_ROW(widthBits, 1);
 
-/* 5/31/89 (ef) -- hack, hack, hack.  what *am* I supposed to do with */
-/*		0 width characters? */
+    /* 5/31/89 (ef) -- hack, hack, hack.  what *am* I supposed to do with */
+    /*		0 width characters? */
 
     for (row = 0; row < height; row++) {
-        int inLineLen;
-
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
         if (!line)
             break;
 
         if (widthBits == 0) {
-            if (bdfIsPrefix(line, "ENDCHAR"))
+            if ((!line) || (bdfIsPrefix(line, "ENDCHAR")))
                 break;
             else
                 continue;
         }
         pInBits = line;
-        inLineLen = strlen((char *) pInBits);
+        inLineLen = strlen((char*)pInBits);
 
         if (inLineLen & 1) {
             bdfError("odd number of characters in hex encoding\n");
@@ -177,7 +185,7 @@ bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
     }
     if (nextByte != height * widthBytes) {
         bdfError("bytes != rows * bytes_per_row (%d != %d * %d)\n",
-                 nextByte, height, widthBytes);
+            nextByte, height, widthBytes);
         goto BAILOUT;
     }
     if (picture != NULL) {
@@ -191,7 +199,7 @@ bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
         }
     }
     return (TRUE);
- BAILOUT:
+BAILOUT:
     if (picture)
         free(picture);
     pCI->bits = NULL;
@@ -203,9 +211,9 @@ bdfReadBitmap(CharInfoPtr pCI, FontFilePtr file, int bit, int byte,
 static Bool
 bdfSkipBitmap(FontFilePtr file, int height)
 {
-    unsigned char *line;
-    int i = 0;
-    unsigned char lineBuf[BDFLINELEN];
+    unsigned char* line;
+    int         i = 0;
+    unsigned char        lineBuf[BDFLINELEN];
 
     do {
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
@@ -224,21 +232,25 @@ bdfSkipBitmap(FontFilePtr file, int height)
 static void
 bdfFreeFontBits(FontPtr pFont)
 {
-    BitmapFontPtr bitmapFont = (BitmapFontPtr) pFont->fontPrivate;
-    BitmapExtraPtr bitmapExtra = (BitmapExtraPtr) bitmapFont->bitmapExtra;
+    BitmapFontPtr  bitmapFont;
+    BitmapExtraPtr bitmapExtra;
+    int         i, nencoding;
 
+    bitmapFont = (BitmapFontPtr)pFont->fontPrivate;
+    bitmapExtra = (BitmapExtraPtr)bitmapFont->bitmapExtra;
     free(bitmapFont->ink_metrics);
     if (bitmapFont->encoding) {
-        int nencoding = (pFont->info.lastCol - pFont->info.firstCol + 1) *
+        nencoding = (pFont->info.lastCol - pFont->info.firstCol + 1) *
             (pFont->info.lastRow - pFont->info.firstRow + 1);
-        for (int i = 0; i < NUM_SEGMENTS(nencoding); i++)
+        for (i = 0; i < NUM_SEGMENTS(nencoding); i++)
             free(bitmapFont->encoding[i]);
     }
     free(bitmapFont->encoding);
-    for (int i = 0; i < bitmapFont->num_chars; i++)
+    for (i = 0; i < bitmapFont->num_chars; i++)
         free(bitmapFont->metrics[i].bits);
     free(bitmapFont->metrics);
-    if (bitmapExtra) {
+    if (bitmapExtra)
+    {
         free(bitmapExtra->glyphNames);
         free(bitmapExtra->sWidths);
         free(bitmapExtra);
@@ -247,24 +259,25 @@ bdfFreeFontBits(FontPtr pFont)
     free(bitmapFont);
 }
 
-static Bool
-bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
-                  int bit, int byte, int glyph, int scan)
-{
-    unsigned char *line;
-    register CharInfoPtr ci;
-    int i, ndx, nchars, nignored;
-    unsigned int char_row, char_col;
-    int numEncodedGlyphs = 0;
-    CharInfoPtr *bdfEncoding[256];
-    BitmapFontPtr bitmapFont;
-    BitmapExtraPtr bitmapExtra;
-    CARD32 *bitmapsSizes;
-    unsigned char lineBuf[BDFLINELEN];
-    int nencoding;
 
-    bitmapFont = (BitmapFontPtr) pFont->fontPrivate;
-    bitmapExtra = (BitmapExtraPtr) bitmapFont->bitmapExtra;
+static Bool
+bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState* pState,
+    int bit, int byte, int glyph, int scan)
+{
+    unsigned char* line;
+    register CharInfoPtr ci;
+    int i, ndx, nchars, nignored, rchars;
+    unsigned int char_row, char_col;
+    int         numEncodedGlyphs = 0;
+    CharInfoPtr* bdfEncoding[256];
+    BitmapFontPtr  bitmapFont;
+    BitmapExtraPtr bitmapExtra;
+    CARD32* bitmapsSizes;
+    unsigned char        lineBuf[BDFLINELEN];
+    int         nencoding;
+
+    bitmapFont = (BitmapFontPtr)pFont->fontPrivate;
+    bitmapExtra = (BitmapExtraPtr)bitmapFont->bitmapExtra;
 
     if (bitmapExtra) {
         bitmapsSizes = bitmapExtra->bitmapsSizes;
@@ -280,7 +293,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
 
     line = bdfGetLine(file, lineBuf, BDFLINELEN);
 
-    if ((!line) || (sscanf((char *) line, "CHARS %d", &nchars) != 1)) {
+    if ((!line) || (sscanf((char*)line, "CHARS %d", &nchars) != 1)) {
         bdfError("bad 'CHARS' in bdf file\n");
         return (FALSE);
     }
@@ -290,13 +303,15 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
     }
     if (nchars > (signed) (INT32_MAX / sizeof(CharInfoRec))) {
         bdfError("Couldn't allocate pCI (%d*%d)\n", nchars,
-                 (int) sizeof(CharInfoRec));
+            (int)sizeof(CharInfoRec));
         goto BAILOUT;
     }
+
+    rchars = char_dict_count();     // we want to output real-chars
     ci = calloc(nchars, sizeof(CharInfoRec));
     if (!ci) {
         bdfError("Couldn't allocate pCI (%d*%d)\n", nchars,
-                 (int) sizeof(CharInfoRec));
+            (int)sizeof(CharInfoRec));
         goto BAILOUT;
     }
     bitmapFont->metrics = ci;
@@ -305,7 +320,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
         bitmapExtra->glyphNames = malloc(nchars * sizeof(Atom));
         if (!bitmapExtra->glyphNames) {
             bdfError("Couldn't allocate glyphNames (%d*%d)\n",
-                     nchars, (int) sizeof(Atom));
+                nchars, (int)sizeof(Atom));
             goto BAILOUT;
         }
     }
@@ -313,7 +328,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
         bitmapExtra->sWidths = malloc(nchars * sizeof(int));
         if (!bitmapExtra->sWidths) {
             bdfError("Couldn't allocate sWidth (%d *%d)\n",
-                     nchars, (int) sizeof(int));
+                nchars, (int)sizeof(int));
             return FALSE;
         }
     }
@@ -324,28 +339,27 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
     pFont->info.lastCol = 0;
     nignored = 0;
     for (ndx = 0; (ndx < nchars) && (line) && (bdfIsPrefix(line, "STARTCHAR"));) {
-        int t;
-        int wx;                 /* x component of width */
-        int wy;                 /* y component of width */
-        int bw;                 /* bounding-box width */
-        int bh;                 /* bounding-box height */
-        int bl;                 /* bounding-box left */
-        int bb;                 /* bounding-box bottom */
-        int enc, enc2;          /* encoding */
-        unsigned char *p;       /* temp pointer into line */
-        char charName[100];
-        int ignore;
+        int         t;
+        int         wx;		/* x component of width */
+        int         wy;		/* y component of width */
+        int         bw;		/* bounding-box width */
+        int         bh;		/* bounding-box height */
+        int         bl;		/* bounding-box left */
+        int         bb;		/* bounding-box bottom */
+        int         enc, enc2;	/* encoding */
+        unsigned char* p;	/* temp pointer into line */
+        char        charName[100];
+        int         ignore;
 
-        if (sscanf((char *) line, "STARTCHAR %99s", charName) != 1) {
+        if (sscanf((char*)line, "STARTCHAR %99s", charName) != 1) {
             bdfError("bad character name in BDF file\n");
-            goto BAILOUT;       /* bottom of function, free and return error */
+            goto BAILOUT;	/* bottom of function, free and return error */
         }
         if (bitmapExtra)
             bitmapExtra->glyphNames[ndx] = bdfForceMakeAtom(charName, NULL);
 
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
-        if (!line ||
-            (t = sscanf((char *) line, "ENCODING %d %d", &enc, &enc2)) < 1) {
+        if (!line || (t = sscanf((char*)line, "ENCODING %d %d", &enc, &enc2)) < 1) {
             bdfError("bad 'ENCODING' in BDF file\n");
             goto BAILOUT;
         }
@@ -356,6 +370,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
         if (t == 2 && enc == -1)
             enc = enc2;
         ignore = 0;
+
         if (enc == -1) {
             if (!bitmapExtra) {
                 nignored++;
@@ -363,9 +378,10 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
             }
         }
         else if (enc > MAXENCODING) {
-            bdfError("char '%s' has encoding too large (%d)\n", charName, enc);
+            bdfError("char '%s' has encoding too large (%d)\n",
+                charName, enc);
         }
-        else {
+        else if (char_dict_wchar_in_dict(enc)) {
             char_row = (enc >> 8) & 0xFF;
             char_col = enc & 0xFF;
             if (char_row < pFont->info.firstRow)
@@ -376,62 +392,76 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
                 pFont->info.firstCol = char_col;
             if (char_col > pFont->info.lastCol)
                 pFont->info.lastCol = char_col;
-            if (bdfEncoding[char_row] == (CharInfoPtr *) NULL) {
+            if (bdfEncoding[char_row] == (CharInfoPtr*)NULL) {
                 bdfEncoding[char_row] = malloc(256 * sizeof(CharInfoPtr));
                 if (!bdfEncoding[char_row]) {
                     bdfError("Couldn't allocate row %d of encoding (%d*%d)\n",
-                             char_row, INDICES, (int) sizeof(CharInfoPtr));
+                        char_row, INDICES, (int)sizeof(CharInfoPtr));
                     goto BAILOUT;
                 }
                 for (i = 0; i < 256; i++)
-                    bdfEncoding[char_row][i] = (CharInfoPtr) NULL;
+                    bdfEncoding[char_row][i] = (CharInfoPtr)NULL;
             }
             if (bdfEncoding[char_row] != NULL) {
                 bdfEncoding[char_row][char_col] = ci;
                 numEncodedGlyphs++;
             }
         }
+        else {
+            // this char is not in the output dict, skip it.
+            nignored++;
+            ignore = 1;
+        }
 
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
-        if ((!line) || (sscanf((char *) line, "SWIDTH %d %d", &wx, &wy) != 2)) {
-            bdfError("bad 'SWIDTH'\n");
-            goto BAILOUT;
+
+        if (line && (line[6] != '1') && bdfIsPrefix(line, "SWIDTH")) {
+            if ((!line) || (sscanf((char*)line, "SWIDTH %d %d", &wx, &wy) != 2)) {
+                bdfError("bad 'SWIDTH'\n");
+                goto BAILOUT;
+            }
+            if (wy != 0) {
+                bdfError("SWIDTH y value must be zero\n");
+                goto BAILOUT;
+            }
+            line = bdfGetLine(file, lineBuf, BDFLINELEN);
         }
-        if (wy != 0) {
-            bdfError("SWIDTH y value must be zero\n");
-            goto BAILOUT;
+        else {
+            wx = pState->sWidthDefault;
         }
         if (bitmapExtra)
             bitmapExtra->sWidths[ndx] = wx;
 
-/* 5/31/89 (ef) -- we should be able to ditch the character and recover */
-/*		from all of these.					*/
+        if (line && (line[6] != '1') && bdfIsPrefix(line, "DWIDTH")) {
+            if (sscanf((char*)line, "DWIDTH %d %d", &wx, &wy) != 2) {
+                bdfError("bad 'DWIDTH'\n");
+                goto BAILOUT;
+            }
+            line = bdfGetLine(file, lineBuf, BDFLINELEN);
+        }
+        else {
+            wx = pState->dWidthDefault;
+        }
 
-        line = bdfGetLine(file, lineBuf, BDFLINELEN);
-        if ((!line) || (sscanf((char *) line, "DWIDTH %d %d", &wx, &wy) != 2)) {
-            bdfError("bad 'DWIDTH'\n");
-            goto BAILOUT;
+        if (line && (bdfIsPrefix(line, "SWIDTH1") || bdfIsPrefix(line, "DWIDTH1"))) {
+            // skip it
+            line = bdfGetLine(file, lineBuf, BDFLINELEN);
         }
-        if (wy != 0) {
-            bdfError("DWIDTH y value must be zero\n");
-            goto BAILOUT;
-        }
+
         /* xCharInfo metrics are stored as INT16 */
         if ((wx < INT16_MIN) || (wx > INT16_MAX)) {
             bdfError("character '%s' has out of range width, %d\n",
-                     charName, wx);
+                charName, wx);
             goto BAILOUT;
         }
-        line = bdfGetLine(file, lineBuf, BDFLINELEN);
-        if ((!line) ||
-            (sscanf((char *) line, "BBX %d %d %d %d", &bw, &bh, &bl, &bb) !=
-             4)) {
+
+        if ((!line) || (sscanf((char*)line, "BBX %d %d %d %d", &bw, &bh, &bl, &bb) != 4)) {
             bdfError("bad 'BBX'\n");
             goto BAILOUT;
         }
         if ((bh < 0) || (bw < 0)) {
             bdfError("character '%s' has a negative sized bitmap, %dx%d\n",
-                     charName, bw, bh);
+                charName, bw, bh);
             goto BAILOUT;
         }
         /* xCharInfo metrics are read as int, but stored as INT16 */
@@ -439,14 +469,15 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
             (bb > INT16_MAX) || (bb < INT16_MIN) ||
             (bw > (INT16_MAX - bl)) || (bh > (INT16_MAX - bb))) {
             bdfError("character '%s' has out of range metrics, %d %d %d %d\n",
-                     charName, bl, (bl + bw), (bh + bb), -bb);
+                charName, bl, (bl + bw), (bh + bb), -bb);
             goto BAILOUT;
         }
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
         if ((line) && (bdfIsPrefix(line, "ATTRIBUTES"))) {
             for (p = line + strlen("ATTRIBUTES ");
-                 (*p == ' ') || (*p == '\t'); p++)
-                /* empty for loop */ ;
+                (*p == ' ') || (*p == '\t');
+                p++)
+                /* empty for loop */;
             ci->metrics.attributes = (bdfHexByte(p) << 8) + bdfHexByte(p + 2);
             line = bdfGetLine(file, lineBuf, BDFLINELEN);
         }
@@ -475,8 +506,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
             ci->metrics.characterWidth = wx;
             ci->bits = NULL;
             if (!bdfReadBitmap(ci, file, bit, byte, glyph, scan, bitmapsSizes)) {
-                bdfError("could not read bitmap for character '%s'\n",
-                         charName);
+                bdfError("could not read bitmap for character '%s'\n", charName);
                 goto BAILOUT;
             }
             ci++;
@@ -485,14 +515,16 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
         else
             bdfSkipBitmap(file, bh);
 
-        line = bdfGetLine(file, lineBuf, BDFLINELEN);   /* get STARTCHAR or
-                                                         * ENDFONT */
+        line = bdfGetLine(file, lineBuf, BDFLINELEN);	/* get STARTCHAR or
+                                 * ENDFONT */
     }
 
+#if 0
     if (ndx + nignored != nchars) {
         bdfError("%d too few characters\n", nchars - (ndx + nignored));
         goto BAILOUT;
     }
+#endif
     nchars = ndx;
     bitmapFont->num_chars = nchars;
     if ((line) && (bdfIsPrefix(line, "STARTCHAR"))) {
@@ -508,31 +540,33 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
 
     nencoding = (pFont->info.lastRow - pFont->info.firstRow + 1) *
         (pFont->info.lastCol - pFont->info.firstCol + 1);
-    bitmapFont->encoding =
-        calloc(NUM_SEGMENTS(nencoding), sizeof(CharInfoPtr *));
+    bitmapFont->encoding = calloc(NUM_SEGMENTS(nencoding), sizeof(CharInfoPtr*));
     if (!bitmapFont->encoding) {
         bdfError("Couldn't allocate ppCI (%d,%d)\n",
-                 NUM_SEGMENTS(nencoding), (int) sizeof(CharInfoPtr *));
+            NUM_SEGMENTS(nencoding),
+            (int)sizeof(CharInfoPtr*));
         goto BAILOUT;
     }
     pFont->info.allExist = TRUE;
     i = 0;
     for (char_row = pFont->info.firstRow;
-         char_row <= pFont->info.lastRow; char_row++) {
-        if (bdfEncoding[char_row] == (CharInfoPtr *) NULL) {
+        char_row <= pFont->info.lastRow;
+        char_row++) {
+        if (bdfEncoding[char_row] == (CharInfoPtr*)NULL) {
             pFont->info.allExist = FALSE;
             i += pFont->info.lastCol - pFont->info.firstCol + 1;
         }
         else {
             for (char_col = pFont->info.firstCol;
-                 char_col <= pFont->info.lastCol; char_col++) {
+                char_col <= pFont->info.lastCol;
+                char_col++) {
                 if (!bdfEncoding[char_row][char_col])
                     pFont->info.allExist = FALSE;
                 else {
                     if (!bitmapFont->encoding[SEGMENT_MAJOR(i)]) {
                         bitmapFont->encoding[SEGMENT_MAJOR(i)] =
                             calloc(BITMAP_FONT_SEGMENT_SIZE,
-                                   sizeof(CharInfoPtr));
+                                sizeof(CharInfoPtr));
                         if (!bitmapFont->encoding[SEGMENT_MAJOR(i)])
                             goto BAILOUT;
                     }
@@ -547,7 +581,7 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
         if (bdfEncoding[i])
             free(bdfEncoding[i]);
     return (TRUE);
- BAILOUT:
+BAILOUT:
     for (i = 0; i < 256; i++)
         if (bdfEncoding[i])
             free(bdfEncoding[i]);
@@ -558,25 +592,25 @@ bdfReadCharacters(FontFilePtr file, FontPtr pFont, bdfFileState *pState,
 /***====================================================================***/
 
 static Bool
-bdfReadHeader(FontFilePtr file, bdfFileState *pState)
+bdfReadHeader(FontFilePtr file, bdfFileState* pState)
 {
-    unsigned char *line;
-    char namebuf[BDFLINELEN];
-    unsigned char lineBuf[BDFLINELEN];
+    unsigned char* line;
+    char        namebuf[BDFLINELEN];
+    unsigned char        lineBuf[BDFLINELEN];
 
     line = bdfGetLine(file, lineBuf, BDFLINELEN);
     if (!line ||
-        sscanf((char *) line, "STARTFONT " BDFLINESTR, namebuf) != 1 ||
+        sscanf((char*)line, "STARTFONT " BDFLINESTR, namebuf) != 1 ||
         !bdfStrEqual(namebuf, "2.1")) {
         bdfError("bad 'STARTFONT'\n");
         return (FALSE);
     }
     line = bdfGetLine(file, lineBuf, BDFLINELEN);
 #if MAXFONTNAMELEN != 1024
-#error "need to adjust sscanf length limit to be MAXFONTNAMELEN - 1"
+# error "need to adjust sscanf length limit to be MAXFONTNAMELEN - 1"
 #endif
     if (!line ||
-        sscanf((char *) line, "FONT %1023[^\n]", pState->fontName) != 1) {
+        sscanf((char*)line, "FONT %1023[^\n]", pState->fontName) != 1) {
         bdfError("bad 'FONT'\n");
         return (FALSE);
     }
@@ -585,8 +619,8 @@ bdfReadHeader(FontFilePtr file, bdfFileState *pState)
         bdfError("missing 'SIZE'\n");
         return (FALSE);
     }
-    if (sscanf((char *) line, "SIZE %f%d%d", &pState->pointSize,
-               &pState->resolution_x, &pState->resolution_y) != 3) {
+    if (sscanf((char*)line, "SIZE %f%d%d", &pState->pointSize,
+        &pState->resolution_x, &pState->resolution_y) != 3) {
         bdfError("bad 'SIZE'\n");
         return (FALSE);
     }
@@ -606,25 +640,78 @@ bdfReadHeader(FontFilePtr file, bdfFileState *pState)
 /***====================================================================***/
 
 static Bool
-bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
+bdfReadMetricsSet(FontFilePtr file, FontPtr pFont, bdfFileState* pState,
+    unsigned char* line, unsigned char* lineBuf, size_t lineLen)
 {
-    int nProps, props_left, nextProp;
-    char *stringProps;
+    int metricsSet, wx, wy;
+    if (sscanf((char*)line, "METRICSSET %d", &metricsSet) != 1) {
+        bdfError("bad 'METRICSSET'\n");
+        goto BAILOUT;
+    }
+
+    do {
+        line = bdfGetLine(file, lineBuf, lineLen);
+        if (!line) goto BAILOUT;
+
+        if (bdfIsPrefix(line, "SWIDTH")) {
+            if (bdfIsPrefix(line, "SWIDTH1")) {
+                continue;
+            }
+            if ((!line) || (sscanf((char*)line, "SWIDTH %d %d", &wx, &wy) != 2)) {
+                bdfError("bad 'SWIDTH'\n");
+                goto BAILOUT;
+            }
+            pState->sWidthDefault = wx;
+        }
+        if (bdfIsPrefix(line, "DWIDTH")) {
+            if (bdfIsPrefix(line, "DWIDTH1")) {
+                continue;
+            }
+            if ((!line) || (sscanf((char*)line, "DWIDTH %d %d", &wx, &wy) != 2)) {
+                bdfError("bad 'DWIDTH'\n");
+                goto BAILOUT;
+            }
+            pState->dWidthDefault = wx;
+        }
+    } while (
+        bdfIsPrefix(line, "SWIDTH") ||
+        bdfIsPrefix(line, "DWIDTH") ||
+        bdfIsPrefix(line, "SWIDTH1") ||
+        bdfIsPrefix(line, "DWIDTH1") ||
+        bdfIsPrefix(line, "VVECTOR"));
+    return (TRUE);
+
+BAILOUT:
+    return (FALSE);
+}
+
+/***====================================================================***/
+
+static Bool
+bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState* pState)
+{
+    int         nProps, props_left,
+        nextProp;
+    char* stringProps;
     FontPropPtr props;
-    char namebuf[BDFLINELEN], secondbuf[BDFLINELEN], thirdbuf[BDFLINELEN];
-    unsigned char *line;
-    unsigned char lineBuf[BDFLINELEN];
-    BitmapFontPtr bitmapFont = (BitmapFontPtr) pFont->fontPrivate;
+    char        namebuf[BDFLINELEN],
+        secondbuf[BDFLINELEN],
+        thirdbuf[BDFLINELEN];
+    unsigned char* line;
+    unsigned char        lineBuf[BDFLINELEN];
+    BitmapFontPtr  bitmapFont = (BitmapFontPtr)pFont->fontPrivate;
 
     line = bdfGetLine(file, lineBuf, BDFLINELEN);
+    if (line && bdfIsPrefix(line, "METRICSSET")) {
+        bdfReadMetricsSet(file, pFont, pState, line, lineBuf, BDFLINELEN);
+    }
     if (!line || !bdfIsPrefix(line, "STARTPROPERTIES")) {
         bdfError("missing 'STARTPROPERTIES'\n");
         return (FALSE);
     }
-    if ((sscanf((char *) line, "STARTPROPERTIES %d", &nProps) != 1) ||
+    if ((sscanf((char*)line, "STARTPROPERTIES %d", &nProps) != 1) ||
         (nProps <= 0) ||
-        (nProps >
-         (signed) ((INT32_MAX / sizeof(FontPropRec)) - BDF_GENPROPS))) {
+        (nProps > (signed)((INT32_MAX / sizeof(FontPropRec)) - BDF_GENPROPS))) {
         bdfError("bad 'STARTPROPERTIES'\n");
         return (FALSE);
     }
@@ -636,14 +723,14 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
     pFont->info.isStringProp = stringProps;
     if (stringProps == NULL) {
         bdfError("Couldn't allocate stringProps (%d*%d)\n",
-                 (nProps + BDF_GENPROPS), (int) sizeof(Bool));
+            (nProps + BDF_GENPROPS), (int)sizeof(Bool));
         goto BAILOUT;
     }
     pFont->info.props = props = calloc(nProps + BDF_GENPROPS,
-                                       sizeof(FontPropRec));
+        sizeof(FontPropRec));
     if (props == NULL) {
         bdfError("Couldn't allocate props (%d*%d)\n", nProps + BDF_GENPROPS,
-                 (int) sizeof(FontPropRec));
+            (int)sizeof(FontPropRec));
         goto BAILOUT;
     }
 
@@ -653,28 +740,28 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
         line = bdfGetLine(file, lineBuf, BDFLINELEN);
         if (line == NULL || bdfIsPrefix(line, "ENDPROPERTIES")) {
             bdfError("\"STARTPROPERTIES %d\" followed by only %d properties\n",
-                     nProps, nProps - props_left - 1);
+                nProps, nProps - props_left - 1);
             goto BAILOUT;
         }
         while (*line && isspace(*line))
             line++;
 
-        switch (sscanf((char *) line,
-                       BDFLINESTR BDFLINESTR BDFLINESTR,
-                       namebuf, secondbuf, thirdbuf)) {
+        switch (sscanf((char*)line,
+            BDFLINESTR BDFLINESTR BDFLINESTR,
+            namebuf, secondbuf, thirdbuf)) {
         default:
             bdfError("missing '%s' parameter value\n", namebuf);
             goto BAILOUT;
 
         case 2:
             /*
-             * Possibilities include: valid quoted string with no white space
+             * Possibilites include: valid quoted string with no white space
              * valid integer value invalid value
              */
             if (secondbuf[0] == '"') {
                 stringProps[nextProp] = TRUE;
                 props[nextProp].value =
-                    bdfGetPropertyValue((char *) line + strlen(namebuf) + 1);
+                    bdfGetPropertyValue((char*)line + strlen(namebuf) + 1);
                 if (!props[nextProp].value)
                     goto BAILOUT;
                 break;
@@ -691,13 +778,13 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
 
         case 3:
             /*
-             * Possibilities include: valid quoted string with some white space
+             * Possibilites include: valid quoted string with some white space
              * invalid value (reject even if second string is integer)
              */
             if (secondbuf[0] == '"') {
                 stringProps[nextProp] = TRUE;
                 props[nextProp].value =
-                    bdfGetPropertyValue((char *) line + strlen(namebuf) + 1);
+                    bdfGetPropertyValue((char*)line + strlen(namebuf) + 1);
                 if (!props[nextProp].value)
                     goto BAILOUT;
                 break;
@@ -713,7 +800,7 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
             goto BAILOUT;
         }
         if (!bdfSpecialProperty(pFont, &props[nextProp],
-                                stringProps[nextProp], pState))
+            stringProps[nextProp], pState))
             nextProp++;
     }
 
@@ -723,7 +810,7 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
         goto BAILOUT;
     }
     if (!pState->haveFontAscent || !pState->haveFontDescent) {
-        bdfError("missing 'FONT_ASCENT' or 'FONT_DESCENT' properties\n");
+        bdfWarning("missing 'FONT_ASCENT' or 'FONT_DESCENT' properties\n");
         goto BAILOUT;
     }
     if (bitmapFont->bitmapExtra) {
@@ -732,65 +819,64 @@ bdfReadProperties(FontFilePtr file, FontPtr pFont, bdfFileState * pState)
     }
     if (!pState->pointSizeProp) {
         props[nextProp].name = bdfForceMakeAtom("POINT_SIZE", NULL);
-        props[nextProp].value = (INT32) (pState->pointSize * 10.0);
+        props[nextProp].value = (INT32)(pState->pointSize * 10.0);
         stringProps[nextProp] = FALSE;
         pState->pointSizeProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->fontProp) {
         props[nextProp].name = bdfForceMakeAtom("FONT", NULL);
-        props[nextProp].value =
-            (INT32) bdfForceMakeAtom(pState->fontName, NULL);
+        props[nextProp].value = (INT32)bdfForceMakeAtom(pState->fontName, NULL);
         stringProps[nextProp] = TRUE;
         pState->fontProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->weightProp) {
         props[nextProp].name = bdfForceMakeAtom("WEIGHT", NULL);
-        props[nextProp].value = -1;     /* computed later */
+        props[nextProp].value = -1;	/* computed later */
         stringProps[nextProp] = FALSE;
         pState->weightProp = &props[nextProp];
         nextProp++;
     }
-    if (!pState->resolutionProp && pState->resolution_x == pState->resolution_y) {
+    if (!pState->resolutionProp &&
+        pState->resolution_x == pState->resolution_y) {
         props[nextProp].name = bdfForceMakeAtom("RESOLUTION", NULL);
-        props[nextProp].value =
-            (INT32) ((pState->resolution_x * 100.0) / 72.27);
+        props[nextProp].value = (INT32)((pState->resolution_x * 100.0) / 72.27);
         stringProps[nextProp] = FALSE;
         pState->resolutionProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->resolutionXProp) {
         props[nextProp].name = bdfForceMakeAtom("RESOLUTION_X", NULL);
-        props[nextProp].value = (INT32) pState->resolution_x;
+        props[nextProp].value = (INT32)pState->resolution_x;
         stringProps[nextProp] = FALSE;
         pState->resolutionProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->resolutionYProp) {
         props[nextProp].name = bdfForceMakeAtom("RESOLUTION_Y", NULL);
-        props[nextProp].value = (INT32) pState->resolution_y;
+        props[nextProp].value = (INT32)pState->resolution_y;
         stringProps[nextProp] = FALSE;
         pState->resolutionProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->xHeightProp) {
         props[nextProp].name = bdfForceMakeAtom("X_HEIGHT", NULL);
-        props[nextProp].value = -1;     /* computed later */
+        props[nextProp].value = -1;	/* computed later */
         stringProps[nextProp] = FALSE;
         pState->xHeightProp = &props[nextProp];
         nextProp++;
     }
     if (!pState->quadWidthProp) {
         props[nextProp].name = bdfForceMakeAtom("QUAD_WIDTH", NULL);
-        props[nextProp].value = -1;     /* computed later */
+        props[nextProp].value = -1;	/* computed later */
         stringProps[nextProp] = FALSE;
         pState->quadWidthProp = &props[nextProp];
         nextProp++;
     }
     pFont->info.nprops = nextProp;
     return (TRUE);
- BAILOUT:
+BAILOUT:
     if (pFont->info.isStringProp) {
         free(pFont->info.isStringProp);
         pFont->info.isStringProp = NULL;
@@ -815,11 +901,12 @@ bdfUnloadFont(FontPtr pFont)
 
 int
 bdfReadFont(FontPtr pFont, FontFilePtr file,
-            int bit, int byte, int glyph, int scan)
+    int bit, int byte, int glyph, int scan)
 {
     bdfFileState state;
-    xCharInfo *min, *max;
-    BitmapFontPtr bitmapFont;
+    xCharInfo* min,
+        * max;
+    BitmapFontPtr  bitmapFont;
 
     pFont->fontPrivate = 0;
 
@@ -832,11 +919,11 @@ bdfReadFont(FontPtr pFont, FontFilePtr file,
     bitmapFont = calloc(1, sizeof(BitmapFontRec));
     if (!bitmapFont) {
         bdfError("Couldn't allocate bitmapFontRec (%d)\n",
-                 (int) sizeof(BitmapFontRec));
+            (int)sizeof(BitmapFontRec));
         goto BAILOUT;
     }
 
-    pFont->fontPrivate = (pointer) bitmapFont;
+    pFont->fontPrivate = (pointer)bitmapFont;
     bitmapFont->metrics = 0;
     bitmapFont->ink_metrics = 0;
     bitmapFont->bitmaps = 0;
@@ -846,7 +933,7 @@ bdfReadFont(FontPtr pFont, FontFilePtr file,
     bitmapFont->bitmapExtra = calloc(1, sizeof(BitmapExtraRec));
     if (!bitmapFont->bitmapExtra) {
         bdfError("Couldn't allocate bitmapExtra (%d)\n",
-                 (int) sizeof(BitmapExtraRec));
+            (int)sizeof(BitmapExtraRec));
         goto BAILOUT;
     }
 
@@ -860,17 +947,17 @@ bdfReadFont(FontPtr pFont, FontFilePtr file,
         goto BAILOUT;
 
     if (state.haveDefaultCh) {
-        unsigned int r, c;
+        unsigned int r, c, cols;
 
         r = pFont->info.defaultCh >> 8;
         c = pFont->info.defaultCh & 0xFF;
         if (pFont->info.firstRow <= r && r <= pFont->info.lastRow &&
             pFont->info.firstCol <= c && c <= pFont->info.lastCol) {
-            unsigned int cols = pFont->info.lastCol - pFont->info.firstCol + 1;
+            cols = pFont->info.lastCol - pFont->info.firstCol + 1;
             r = r - pFont->info.firstRow;
             c = c - pFont->info.firstCol;
             bitmapFont->pDefault = ACCESSENCODING(bitmapFont->encoding,
-                                                  r * cols + c);
+                r * cols + c);
         }
     }
     pFont->bit = bit;
@@ -897,19 +984,19 @@ bdfReadFont(FontPtr pFont, FontFilePtr file,
         bitmapFont->bitmapExtra->info.inkMetrics = pFont->info.inkMetrics;
 
     bitmapComputeFontInkBounds(pFont);
-/*    ComputeFontAccelerators (pFont); */
+    /*    ComputeFontAccelerators (pFont); */
 
-    /* generate properties */
+        /* generate properties */
     min = &pFont->info.ink_minbounds;
     max = &pFont->info.ink_maxbounds;
     if (state.xHeightProp && (state.xHeightProp->value == -1))
         state.xHeightProp->value = state.exHeight ?
-            state.exHeight : min->ascent;
+        state.exHeight : min->ascent;
 
     if (state.quadWidthProp && (state.quadWidthProp->value == -1))
         state.quadWidthProp->value = state.digitCount ?
-            (INT32) (state.digitWidths / state.digitCount) :
-            (min->characterWidth + max->characterWidth) / 2;
+        (INT32)(state.digitWidths / state.digitCount) :
+        (min->characterWidth + max->characterWidth) / 2;
 
     if (state.weightProp && (state.weightProp->value == -1))
         state.weightProp->value = bitmapComputeWeight(pFont);
@@ -919,21 +1006,43 @@ bdfReadFont(FontPtr pFont, FontFilePtr file,
     pFont->unload_font = bdfUnloadFont;
     pFont->unload_glyphs = NULL;
     return Successful;
- BAILOUT:
+BAILOUT:
     if (pFont->fontPrivate)
         bdfFreeFontBits(pFont);
     return AllocError;
 }
 
+int
+bdfReadFontInfo(FontInfoPtr pFontInfo, FontFilePtr file)
+{
+    FontRec     font;
+    int         ret;
+
+    bzero(&font, sizeof(FontRec));
+
+    ret = bdfReadFont(&font, file, MSBFirst, LSBFirst, 1, 1);
+    if (ret == Successful) {
+        *pFontInfo = font.info;
+        font.info.props = 0;
+        font.info.isStringProp = 0;
+        font.info.nprops = 0;
+        bdfFreeFontBits(&font);
+    }
+    return ret;
+}
+
 static Bool
 bdfPadToTerminal(FontPtr pFont)
 {
-    BitmapFontPtr bitmapFont;
+    BitmapFontPtr  bitmapFont;
     BitmapExtraPtr bitmapExtra;
-    int new_size;
+    int         i;
+    int         new_size;
     CharInfoRec new;
+    int         w,
+        h;
 
-    bitmapFont = (BitmapFontPtr) pFont->fontPrivate;
+    bitmapFont = (BitmapFontPtr)pFont->fontPrivate;
 
     bzero(&new, sizeof(CharInfoRec));
     new.metrics.ascent = pFont->info.fontAscent;
@@ -943,7 +1052,7 @@ bdfPadToTerminal(FontPtr pFont)
     new.metrics.characterWidth = new.metrics.rightSideBearing;
     new_size = BYTES_FOR_GLYPH(&new, pFont->glyph);
 
-    for (int i = 0; i < bitmapFont->num_chars; i++) {
+    for (i = 0; i < bitmapFont->num_chars; i++) {
         new.bits = malloc(new_size);
         if (!new.bits) {
             bdfError("Couldn't allocate bits (%d)\n", new_size);
@@ -956,11 +1065,11 @@ bdfPadToTerminal(FontPtr pFont)
     }
     bitmapExtra = bitmapFont->bitmapExtra;
     if (bitmapExtra) {
-        int w = GLYPHWIDTHPIXELS(&new);
-        int h = GLYPHHEIGHTPIXELS(&new);
-        for (int i = 0; i < GLYPHPADOPTIONS; i++)
+        w = GLYPHWIDTHPIXELS(&new);
+        h = GLYPHHEIGHTPIXELS(&new);
+        for (i = 0; i < GLYPHPADOPTIONS; i++)
             bitmapExtra->bitmapsSizes[i] = bitmapFont->num_chars *
-                (BYTES_PER_ROW(w, 1 << i) * h);
+            (BYTES_PER_ROW(w, 1 << i) * h);
     }
     return TRUE;
 }
