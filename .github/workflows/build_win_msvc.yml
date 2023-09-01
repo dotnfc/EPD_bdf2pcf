@@ -24,5 +24,5 @@ jobs:
       with:
         name: epd_bdf2pcf
         path: |
-          Release/bdf2pcf.exe
-          ../example/
+          msvc/Release/bdf2pcf.exe
+          example/
