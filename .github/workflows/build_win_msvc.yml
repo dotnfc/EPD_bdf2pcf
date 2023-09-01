@@ -18,3 +18,11 @@ jobs:
     - name: Build Project
       working-directory: msvc
       run: msbuild /p:Configuration="Release" bdf2pcf.vcxproj
+
+    - name: Upload Release Asset
+    - uses: actions/upload-artifact@v3
+      with:
+        name: epd_bdf2pcf
+        path: |
+          Release/bdf2pcf.exe
+          ../example/
